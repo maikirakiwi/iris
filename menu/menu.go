@@ -119,14 +119,15 @@ func ModifyExistingLink() {
 		var q promptui.Prompt
 		if allLinks[selection].Active {
 			q = promptui.Prompt{
-				Label:     "Deactivate Link? (y/n)",
+				Label:     "Deactivate Link?",
 				IsConfirm: true,
 			}
 		} else {
 			q = promptui.Prompt{
-				Label:     "Activate Link? (y/n)",
+				Label:     "Activate Link?",
 				IsConfirm: true,
 			}
+			allLinks[selection].Used = 0
 		}
 		result, err := q.Run()
 		if result == "n" || err != nil {
@@ -149,7 +150,7 @@ func ModifyExistingLink() {
 		DB.Conn.Save(&allLinks[selection])
 	case "Delete Link":
 		prompt := promptui.Prompt{
-			Label:     "Delete Link Locally & Deactivate on Stripe? (y/n)",
+			Label:     "Delete Link Locally & Deactivate on Stripe?",
 			IsConfirm: true,
 		}
 		result, _ := prompt.Run()
