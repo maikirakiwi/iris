@@ -65,8 +65,7 @@ func checkoutHandler(event stripe.Event) bool {
 
 		if session.PaymentStatus == "paid" {
 			link := &models.PaymentLink{}
-			link.LinkID = session.PaymentLink.ID
-			db_res := DB.Conn.First(&link)
+			db_res := DB.Conn.Where(&models.PaymentLink{LinkID: session.PaymentLink.ID}).First(&link)
 			if db_res.Error != nil {
 				if errors.Is(db_res.Error, gorm.ErrRecordNotFound) {
 					return true
