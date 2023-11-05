@@ -33,6 +33,6 @@ jobs:
         # either 'goreleaser' (default) or 'goreleaser-pro':
         distribution: goreleaser
         version: latest
-        args: release --clean --snapshot
+        args: release --clean
       env:
         GITHUB_TOKEN: ${{ secrets.MY_REPO_PAT }}  
