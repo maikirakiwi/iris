@@ -28,6 +28,6 @@ Iris is a powerful yet user-friendly no-code solution to using [Stripe](https://
 
 ### ✨ Sponsor
 
-<img src="https://mai.kiwi/_app/immutable/assets/logo-de3ddbf3.png" alt="Maikiwi Network" width="50"/> 
+<img src="https://mai.kiwi/_app/immutable/assets/logo-de3ddbf3.png" alt="Maikiwi Network" width="55"/> 
 
 Iris is part of Maikiwi Network's U.S. Small Business Advantage Initiative. 
