@@ -28,6 +28,6 @@ Iris 是一个功能强大且用户友好的无代码 [Stripe](https://stripe.co
 
 ### ✨ Sponsor
 
-<img src="https://mai.kiwi/_app/immutable/assets/logo-de3ddbf3.png" alt="Maikiwi Network" width="50"/> 
+<img src="https://mai.kiwi/_app/immutable/assets/logo-de3ddbf3.png" alt="Maikiwi Network" width="55"/> 
 
 Iris 由麦肯威国际互联的美国初创优势计划提供技术以及资金支持。
