@@ -3,12 +3,10 @@ package menu
 import (
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/manifoldco/promptui"
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/paymentlink"
-	"github.com/stripe/stripe-go/v76/price"
 
 	DB "stripe-handler/v2/database"
 	"stripe-handler/v2/models"
@@ -61,9 +59,9 @@ func ModifyExistingLink() {
 	for _, link := range allLinks {
 		if link.Active {
 			readableLinks = append(readableLinks, "[Active] "+link.Nickname+" ("+strconv.Itoa(link.Used)+"/"+strconv.Itoa(link.MaxUses)+")")
-		} else {
-			readableLinks = append(readableLinks, "[Inactive] "+link.Nickname+" ("+strconv.Itoa(link.Used)+"/"+strconv.Itoa(link.MaxUses)+")")
+			continue
 		}
+		readableLinks = append(readableLinks, "[Inactive] "+link.Nickname+" ("+strconv.Itoa(link.Used)+"/"+strconv.Itoa(link.MaxUses)+")")
 	}
 
 	prompt := promptui.Select{
@@ -131,6 +129,9 @@ func ModifyExistingLink() {
 		}
 		result, err := q.Run()
 		if result == "n" || err != nil {
+			if err == promptui.ErrInterrupt {
+				os.Exit(-1)
+			}
 			return
 		}
 		pl, err := paymentlink.Update(
@@ -140,9 +141,6 @@ func ModifyExistingLink() {
 			},
 		)
 		if err != nil {
-			if err == promptui.ErrInterrupt {
-				os.Exit(-1)
-			}
 			println("Error while changing link on Stripe: " + err.Error())
 			return
 		}
@@ -169,105 +167,6 @@ func ModifyExistingLink() {
 		}
 	}
 	Main()
-}
-
-func CreateNewLink() {
-	settings := &models.Settings{}
-	db_res := DB.Conn.First(&settings)
-	if db_res.Error != nil {
-		println("Error: %v\n", db_res.Error)
-		return
-	}
-	stripe.Key = settings.ApiKey
-
-	prompt := promptui.Prompt{
-		Label: "Set Payment Link Nickname",
-	}
-	nick, _ := prompt.Run()
-
-	prompt = promptui.Prompt{
-		Label: "Set Max Uses",
-	}
-	maxuses, _ := prompt.Run()
-	maxusesInt, err := strconv.Atoi(maxuses)
-	if err != nil {
-		println("Error: %v\n", err)
-		return
-	}
-
-	items := []*stripe.PaymentLinkLineItemParams{}
-
-	for {
-		prompt := promptui.Prompt{
-			Label: "Product ID, qty and Price in USD cents, separated by space. Leave blank to finish.",
-		}
-		input, err := prompt.Run()
-		if err != nil {
-			if err == promptui.ErrInterrupt {
-				os.Exit(-1)
-			}
-			println("Error: %v\n", err)
-			return
-		}
-		if input == "" {
-			break
-		}
-		split := strings.Split(input, " ")
-		if len(split) != 3 {
-			println("Error: Invalid input")
-			continue
-		}
-		qty, err := strconv.ParseInt(split[1], 10, 64)
-		if err != nil {
-			println("Error: Invalid input")
-			continue
-		}
-		perPrice, err := strconv.ParseInt(split[2], 10, 64)
-		if err != nil {
-			println("Error: Invalid input")
-			continue
-		}
-
-		item, err := price.New(&stripe.PriceParams{
-			Currency:   stripe.String(string(stripe.CurrencyUSD)),
-			UnitAmount: stripe.Int64(perPrice),
-			Product:    stripe.String(split[0]),
-		})
-		if err != nil {
-			println("Error while adding item: " + err.Error())
-			continue
-		}
-
-		items = append(items, &stripe.PaymentLinkLineItemParams{
-			Price:    stripe.String(item.ID),
-			Quantity: stripe.Int64(qty),
-		})
-	}
-
-	params := &stripe.PaymentLinkParams{
-		LineItems: items,
-	}
-	link, err := paymentlink.New(params)
-	if err != nil {
-		println("Error while creating link: " + err.Error())
-		return
-	}
-
-	err = DB.Conn.Create(&models.PaymentLink{
-		Active:   true,
-		Nickname: nick,
-		LinkID:   link.ID,
-		URL:      link.URL,
-		Used:     0,
-		MaxUses:  maxusesInt,
-	}).Error
-	if err != nil {
-		println("Error while adding link to database: " + err.Error())
-		return
-	}
-
-	println("Link: " + link.URL)
-
 }
 
 func ChangeEndpointSecret() {

@@ -1,6 +1,8 @@
 package database
 
 import (
+	"log/slog"
+
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
@@ -8,6 +10,11 @@ import (
 )
 
 var Conn *gorm.DB
+
+// Non exported
+var apiKey string
+var webhookSecret string
+var defaultCurrency string
 
 func Init() {
 	var err error
@@ -19,6 +26,31 @@ func Init() {
 	if err != nil {
 		panic("failed to connect to database")
 	}
+
 	Conn.AutoMigrate(&models.Settings{})
 	Conn.AutoMigrate(&models.PaymentLink{})
+	Conn.AutoMigrate(&models.Price{})
+}
+
+func GetSettings() *models.Settings {
+	settings := &models.Settings{}
+	db_res := Conn.First(&settings)
+
+	// Return global cache if db is overwhelmed
+	if db_res.Error != nil {
+		slog.Warn("Error reading database: %v\n", db_res.Error)
+
+		return &models.Settings{
+			ApiKey:                apiKey,
+			WebhookEndpointSecret: webhookSecret,
+			DefaultCurrency:       defaultCurrency,
+		}
+	}
+
+	// Update cache
+	apiKey = settings.ApiKey
+	webhookSecret = settings.WebhookEndpointSecret
+	defaultCurrency = settings.DefaultCurrency
+
+	return settings
 }

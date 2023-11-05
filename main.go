@@ -1,16 +1,17 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/paymentlink"
 	"github.com/stripe/stripe-go/v76/webhook"
+	json "github.com/sugawarayuuta/sonnet" // Faster and correct, drop in json parser
 	"gorm.io/gorm"
 
 	DB "stripe-handler/v2/database"
@@ -24,19 +25,14 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading request body: %v\n", err)
+		slog.Warn("Error reading request body: %v\n", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 
-	settings := &models.Settings{}
-	db_res := DB.Conn.First(&settings)
-	if db_res.Error != nil {
-		println("Error: %v\n", db_res.Error)
-		return
-	}
-
+	settings := DB.GetSettings()
 	stripe.Key = settings.ApiKey
+
 	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), settings.WebhookEndpointSecret)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error verifying webhook signature: %v\n", err)
