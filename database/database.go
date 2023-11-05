@@ -6,7 +6,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"stripe-handler/v2/models"
+	"iris/v2/models"
 )
 
 var Conn *gorm.DB

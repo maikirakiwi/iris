@@ -7,8 +7,8 @@ import (
 	"github.com/stripe/stripe-go/v76/price"
 	"gorm.io/gorm"
 
-	DB "stripe-handler/v2/database"
-	"stripe-handler/v2/models"
+	DB "iris/v2/database"
+	"iris/v2/models"
 )
 
 func NewPriceIfNotExist(Currency string, UnitAmount int64, Product string) (models.Price, error) {

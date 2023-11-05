@@ -1,4 +1,4 @@
-module stripe-handler/v2
+module iris/v2
 
 go 1.21.3
 

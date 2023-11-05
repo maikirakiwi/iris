@@ -14,9 +14,9 @@ import (
 	json "github.com/sugawarayuuta/sonnet" // Faster and correct, drop in json parser
 	"gorm.io/gorm"
 
-	DB "stripe-handler/v2/database"
-	"stripe-handler/v2/menu"
-	"stripe-handler/v2/models"
+	DB "iris/v2/database"
+	"iris/v2/menu"
+	"iris/v2/models"
 )
 
 func webhookHandler(w http.ResponseWriter, r *http.Request) {

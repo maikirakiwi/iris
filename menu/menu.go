@@ -8,8 +8,8 @@ import (
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/paymentlink"
 
-	DB "stripe-handler/v2/database"
-	"stripe-handler/v2/models"
+	DB "iris/v2/database"
+	"iris/v2/models"
 )
 
 func Main() {
