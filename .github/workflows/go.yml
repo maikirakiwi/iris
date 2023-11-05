@@ -1,6 +1,10 @@
 name: Build
 
-on: workflow_dispatch
+on:
+  push:
+    # run only against tags
+    tags:
+      - "*"
 
 jobs:
   build:
