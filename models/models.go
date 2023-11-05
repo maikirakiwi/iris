@@ -11,9 +11,10 @@ import (
 
 type Settings struct {
 	gorm.Model
-	ApiKey                string
-	WebhookEndpointSecret string
-	DefaultCurrency       string `gorm:"default:usd"`
+	ApiKey                     string
+	WebhookEndpointSecret      string
+	DefaultCurrency            string `gorm:"default:usd"`
+	PaymentConfirmationMessage string `gorm:"default:0"`
 }
 
 type PaymentLink struct {

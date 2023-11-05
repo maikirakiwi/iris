@@ -9,7 +9,7 @@ import (
 func Entry() {
 	paymentLinksOpt := []string{"Create New Link", "Modify Existing Link"}
 	customFieldOpt := []string{"Create Custom Field", "Delete Custom Field"}
-	stripeSettingsOpt := []string{"Change Stripe API Key", "Change Webhook Endpoint Secret", "Change Default Currency"}
+	stripeSettingsOpt := []string{"Change Stripe API Key", "Change Webhook Endpoint Secret", "Change Default Currency", "Change Custom Payment Confirmation Message"}
 	prompt := promptui.Select{
 		Label: "Iris Menu (Ctrl+C to exit at any time)",
 		Items: []string{
@@ -75,6 +75,8 @@ func Entry() {
 	case "Change Default Currency":
 		ChangeDefaultCurrency()
 		Entry()
-
+	case "Change Custom Payment Confirmation Message":
+		ChangePaymentConfirmationMsg()
+		Entry()
 	}
 }

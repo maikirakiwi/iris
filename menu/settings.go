@@ -133,3 +133,20 @@ func ChangeDefaultCurrency() {
 	settings.DefaultCurrency = strings.ToLower(result)
 	DB.Conn.Save(&settings)
 }
+
+func ChangePaymentConfirmationMsg() {
+	prompt := promptui.Prompt{
+		Label: fmt.Sprintf("Change Payment Confirmation Message, or set to 0 to disable (Currently: %s)", DB.GetSettings().PaymentConfirmationMessage),
+	}
+
+	result, _ := prompt.Run()
+
+	settings := models.Settings{}
+	db_res := DB.Conn.FirstOrCreate(&settings)
+	if db_res.Error != nil {
+		println("Error: %v\n", db_res.Error.Error())
+		return
+	}
+	settings.PaymentConfirmationMessage = result
+	DB.Conn.Save(&settings)
+}

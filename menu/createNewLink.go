@@ -201,18 +201,21 @@ func CreateNewLink() {
 
 	// Stripe hates empty custom fields
 	var params *stripe.PaymentLinkParams
-	if len(selectedCustomFields) == 0 {
-		params = &stripe.PaymentLinkParams{
-			LineItems:           items,
-			AllowPromotionCodes: stripe.Bool(allowCouponBool),
-		}
-	} else {
-		params = &stripe.PaymentLinkParams{
-			LineItems:           items,
-			AllowPromotionCodes: stripe.Bool(allowCouponBool),
-			CustomFields:        selectedCustomFields,
+	params.LineItems = items
+	params.AllowPromotionCodes = stripe.Bool(allowCouponBool)
+	if len(selectedCustomFields) != 0 {
+		params.CustomFields = selectedCustomFields
+	}
+	paymentConfirmation := DB.GetSettings().PaymentConfirmationMessage
+	if paymentConfirmation != "" {
+		params.AfterCompletion = &stripe.PaymentLinkAfterCompletionParams{
+			Type: stripe.String("hosted_confirmation"),
+			HostedConfirmation: &stripe.PaymentLinkAfterCompletionHostedConfirmationParams{
+				CustomMessage: stripe.String(paymentConfirmation),
+			},
 		}
 	}
+
 	link, err := paymentlink.New(params)
 	if err != nil {
 		println("Error while creating link: " + err.Error())
