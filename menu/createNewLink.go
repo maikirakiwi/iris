@@ -38,6 +38,22 @@ func CreateNewLink() {
 		return
 	}
 
+	prompt = promptui.Prompt{
+		Label:     "Allow coupons and promotion codes?",
+		IsConfirm: true,
+	}
+	allowCoupon, _ := prompt.Run()
+	if err != nil {
+		println("Error: %v\n", err)
+		return
+	}
+	var allowCouponBool bool
+	if allowCoupon == "y" {
+		allowCouponBool = true
+	} else {
+		allowCouponBool = false
+	}
+
 	items := []*stripe.PaymentLinkLineItemParams{}
 
 	for {
@@ -84,7 +100,8 @@ func CreateNewLink() {
 	}
 
 	params := &stripe.PaymentLinkParams{
-		LineItems: items,
+		LineItems:           items,
+		AllowPromotionCodes: stripe.Bool(allowCouponBool),
 	}
 	link, err := paymentlink.New(params)
 	if err != nil {

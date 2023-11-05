@@ -5,7 +5,6 @@
 ![Go version](https://img.shields.io/github/go-mod/go-version/maikirakiwi/iris/main?label=go)
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 
-
 Iris is a powerful yet user-friendly no-code solution to using [Stripe](https://stripe.com) without a functional website.
 
 ## 💡 Features
@@ -15,3 +14,9 @@ Iris is a powerful yet user-friendly no-code solution to using [Stripe](https://
 ## 📦 Installation
 
 - TBA 
+
+### ✨ Sponsor
+
+<img src="https://mai.kiwi/_app/immutable/assets/logo-de3ddbf3.png" alt="Maikiwi Network" width="50"/> 
+
+Iris is part of Maikiwi Network's U.S. Small Business Advantage Initiative. 
