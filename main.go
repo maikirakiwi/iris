@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +12,6 @@ import (
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/paymentlink"
 	"github.com/stripe/stripe-go/v76/webhook"
-	json "github.com/sugawarayuuta/sonnet" // Faster and correct, drop in json parser
 	"gorm.io/gorm"
 
 	DB "iris/v2/database"
@@ -35,11 +35,12 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), settings.WebhookEndpointSecret)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error verifying webhook signature: %v\n", err)
+		slog.Error("Error verifying webhook signature: " + err.Error())
 		w.WriteHeader(http.StatusBadRequest) // Return a 400 error on a bad signature
 		return
 	}
 
+	// If error raised while handling event, return bad request.
 	if !checkoutHandler(event) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -55,7 +56,7 @@ func checkoutHandler(event stripe.Event) bool {
 
 		err := json.Unmarshal(event.Data.Raw, &session)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			slog.Error("Error parsing webhook JSON: " + err.Error())
 			return false
 		}
 
@@ -66,7 +67,7 @@ func checkoutHandler(event stripe.Event) bool {
 				if errors.Is(db_res.Error, gorm.ErrRecordNotFound) {
 					return true
 				}
-				println("Error: %v\n", db_res.Error)
+				slog.Error("Error while reading: " + db_res.Error.Error())
 				return false
 			}
 
@@ -80,14 +81,14 @@ func checkoutHandler(event stripe.Event) bool {
 					},
 				)
 				if err != nil {
-					println("Error while changing link on Stripe: " + err.Error())
+					slog.Error("Error while changing link on Stripe: " + err.Error())
 					return false
 				}
 			}
-			println("Link " + link.LinkID + " now used " + fmt.Sprintf("%d", link.Used) + " times")
+			slog.Info("Link " + link.LinkID + " now used " + fmt.Sprintf("%d", link.Used) + " times")
 			db_res = DB.Conn.Save(&link)
 			if db_res.Error != nil {
-				println("Error: %v\n", db_res.Error)
+				slog.Error("Error while saving link paid event to database: " + db_res.Error.Error())
 				return false
 			}
 		}

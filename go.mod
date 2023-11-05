@@ -6,7 +6,6 @@ require (
 	github.com/glebarez/sqlite v1.9.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/stripe/stripe-go/v76 v76.2.0
-	github.com/sugawarayuuta/sonnet v0.0.0-20231004000330-239c7b6e4ce8
 	gorm.io/gorm v1.25.5
 )
 

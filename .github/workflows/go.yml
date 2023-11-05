@@ -23,16 +23,12 @@ jobs:
     - run: |
         git fetch --prune --unshallow --tags
 
-    - name: Get dependencies and build
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install gcc-mingw-w64-x86-64
-        sudo apt-get -y install gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
-        sudo apt-get -y install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-        go build .
-
-    - name: Upload binary files (linux_amd64)
-      uses: actions/upload-artifact@v2
+      
+    - uses: goreleaser/goreleaser-action@v5
       with:
-        name: iris_linux_amd64
-        path: iris*
+        # either 'goreleaser' (default) or 'goreleaser-pro':
+        distribution: goreleaser
+        version: latest
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.MY_REPO_PAT }}  

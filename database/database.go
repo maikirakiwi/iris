@@ -38,7 +38,7 @@ func GetSettings() *models.Settings {
 
 	// Return global cache if db is overwhelmed
 	if db_res.Error != nil {
-		slog.Warn("Error reading database: %v\n", db_res.Error)
+		slog.Warn("Error reading database settings: %v\n", db_res.Error)
 
 		return &models.Settings{
 			ApiKey:                apiKey,
