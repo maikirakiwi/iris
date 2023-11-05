@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -39,8 +40,7 @@ func CreateNewLink() {
 	}
 
 	prompt = promptui.Prompt{
-		Label:     "Allow coupons and promotion codes?",
-		IsConfirm: true,
+		Label: "Allow coupons and promotion codes? (y/n)",
 	}
 	allowCoupon, _ := prompt.Run()
 	if err != nil {
@@ -58,7 +58,7 @@ func CreateNewLink() {
 
 	for {
 		prompt := promptui.Prompt{
-			Label: "Product ID, qty and Price in USD cents, separated by space. Leave blank to finish.",
+			Label: "Product ID, qty and Price in cents (e.g. $1.99 = 199), separated by space. Leave blank to finish.",
 		}
 		input, err := prompt.Run()
 		if err != nil {
@@ -87,21 +87,131 @@ func CreateNewLink() {
 			continue
 		}
 
-		item, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, perPrice, split[0])
+		itemID, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, perPrice, split[0])
 		if err != nil {
 			println("Error while adding item: " + err.Error())
 			continue
 		}
 
-		items = append(items, &stripe.PaymentLinkLineItemParams{
-			Price:    stripe.String(item.PriceID),
-			Quantity: stripe.Int64(qty),
-		})
+		prompt = promptui.Prompt{
+			Label: "Allow customer adjustable quantity for this item? (y/n)",
+		}
+		input, err = prompt.Run()
+		if err != nil {
+			if err == promptui.ErrInterrupt {
+				os.Exit(-1)
+			}
+			println("Error: %v\n", err)
+			return
+		}
+
+		if input == "y" {
+			prompt = promptui.Prompt{
+				Label: "Set min and max adjustable qty separated by space. e.g. min 1 and max 5 is 1 5",
+			}
+			input, err = prompt.Run()
+			if err != nil {
+				if err == promptui.ErrInterrupt {
+					os.Exit(-1)
+				}
+				println("Error: %v\n", err)
+				return
+			}
+			adjQty := strings.Split(input, " ")
+			if len(adjQty) != 2 {
+				println("Error: Invalid input")
+				continue
+			}
+			adjMin, err := strconv.ParseInt(adjQty[0], 10, 64)
+			if err != nil {
+				println("Error: Invalid input")
+				continue
+			}
+			adjMax, err := strconv.ParseInt(adjQty[1], 10, 64)
+			if err != nil {
+				println("Error: Invalid input")
+				continue
+			}
+
+			items = append(items, &stripe.PaymentLinkLineItemParams{
+				Price:    stripe.String(itemID),
+				Quantity: stripe.Int64(qty),
+				AdjustableQuantity: &stripe.PaymentLinkLineItemAdjustableQuantityParams{
+					Enabled: stripe.Bool(true),
+					Minimum: stripe.Int64(adjMin),
+					Maximum: stripe.Int64(adjMax),
+				},
+			})
+		} else {
+			items = append(items, &stripe.PaymentLinkLineItemParams{
+				Price:    stripe.String(itemID),
+				Quantity: stripe.Int64(qty),
+			})
+		}
+
 	}
 
-	params := &stripe.PaymentLinkParams{
-		LineItems:           items,
-		AllowPromotionCodes: stripe.Bool(allowCouponBool),
+	prompt = promptui.Prompt{
+		Label: "Number of Custom Fields to add (up to 2), leave blank to skip",
+	}
+	input, err := prompt.Run()
+	if err != nil {
+		if err == promptui.ErrInterrupt {
+			os.Exit(-1)
+		}
+		println("Error: %v\n", err)
+		return
+	}
+	inputInt, err := strconv.Atoi(input)
+	if err != nil && input != "" {
+		println("Error: %v\n", err)
+		return
+	}
+	selectedCustomFields := []*stripe.PaymentLinkCustomFieldParams{}
+	allCustomFields := []models.CustomFields{}
+	db_res = DB.Conn.Find(&allCustomFields)
+	if db_res.Error != nil {
+		println("Error: %v\n", db_res.Error.Error())
+		return
+	}
+
+	if len(allCustomFields) == 0 && (input != "" || inputInt > 0) {
+		println("No custom fields found, please create some first.")
+	} else if input != "" || inputInt > 0 {
+		readableFields := []string{}
+		for _, field := range allCustomFields {
+			readableFields = append(readableFields, field.Label)
+		}
+		for i := 0; i < inputInt; i++ {
+			prompt := promptui.Select{
+				Label: fmt.Sprintf("Select (%d/%d) Custom Field to add", i+1, inputInt),
+				Items: readableFields,
+			}
+			index, _, err := prompt.Run()
+			if err != nil {
+				if err == promptui.ErrInterrupt {
+					os.Exit(-1)
+				}
+				println("Prompt failed %v\n", err)
+				return
+			}
+			selectedCustomFields = append(selectedCustomFields, allCustomFields[index].ToStripe())
+		}
+	}
+
+	// Stripe hates empty custom fields
+	var params *stripe.PaymentLinkParams
+	if len(selectedCustomFields) == 0 {
+		params = &stripe.PaymentLinkParams{
+			LineItems:           items,
+			AllowPromotionCodes: stripe.Bool(allowCouponBool),
+		}
+	} else {
+		params = &stripe.PaymentLinkParams{
+			LineItems:           items,
+			AllowPromotionCodes: stripe.Bool(allowCouponBool),
+			CustomFields:        selectedCustomFields,
+		}
 	}
 	link, err := paymentlink.New(params)
 	if err != nil {

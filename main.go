@@ -99,7 +99,7 @@ func checkoutHandler(event stripe.Event) bool {
 
 func serveWeb() {
 	http.HandleFunc("/webhook", webhookHandler)
-	println("Starting server on port 4242")
+	fmt.Println("Starting server on port 4242")
 	http.ListenAndServe(":4242", nil)
 }
 
@@ -113,7 +113,7 @@ func main() {
 	}
 
 	if len(os.Args) > 1 && os.Args[1] == "menu" {
-		menu.Main()
+		menu.Entry()
 	} else {
 		serveWeb()
 	}

@@ -27,9 +27,13 @@ func Init() {
 		panic("failed to connect to database")
 	}
 
-	Conn.AutoMigrate(&models.Settings{})
-	Conn.AutoMigrate(&models.PaymentLink{})
-	Conn.AutoMigrate(&models.Price{})
+	Conn.AutoMigrate(
+		&models.Settings{},
+		&models.PaymentLink{},
+		&models.Price{},
+		&models.CustomFields{},
+		&models.DropdownOption{},
+	)
 }
 
 func GetSettings() *models.Settings {
