@@ -9,11 +9,22 @@ Iris is a powerful yet user-friendly no-code solution to using [Stripe](https://
 
 ## 💡 Features
 
-- TBA
+- Easy to use Terminal UI for configuration. 
+- Configure Limited-Use Payment Links with inventory management (TBA)
+- Payment Link Customizations
+    - Charging Currency
+    - Payment Confirmation Message
+    - Custom Fields with input types Text, Numeric, and Dropdowns.
+    - Nickname the links for easier management
+- Lightweight and runs quite literally everywhere.
 
-## 📦 Installation
+## 📦 Usage
 
-- TBA 
+- Download the latest release
+- Make sure your [Stripe API Version](https://dashboard.stripe.com/test/developers) is set to **2023-10-16**
+
+`./binary menu` for configuration menu.
+`./binary` for launching the main webhook server. 
 
 ### ✨ Sponsor
 
