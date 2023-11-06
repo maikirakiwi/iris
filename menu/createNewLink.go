@@ -23,6 +23,7 @@ func CreateNewLink() {
 		return
 	}
 	stripe.Key = settings.ApiKey
+	params := new(stripe.PaymentLinkParams)
 
 	prompt := promptui.Prompt{
 		Label: "Set Payment Link Nickname",
@@ -47,18 +48,34 @@ func CreateNewLink() {
 		println("Error: %v\n", err)
 		return
 	}
-	var allowCouponBool bool
 	if allowCoupon == "y" {
-		allowCouponBool = true
+		params.AllowPromotionCodes = stripe.Bool(true)
 	} else {
-		allowCouponBool = false
+		params.AllowPromotionCodes = stripe.Bool(false)
+	}
+
+	prompt = promptui.Prompt{
+		Label: "Ask for shipping address? (y/n)",
+	}
+	shippingAddress, _ := prompt.Run()
+	if err != nil {
+		println("Error: %v\n", err)
+		return
+	}
+	if shippingAddress == "y" {
+		params.ShippingAddressCollection = &stripe.PaymentLinkShippingAddressCollectionParams{
+			AllowedCountries: stripe.StringSlice([]string{
+				"AC", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AT", "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CV", "CW", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MK", "ML", "MM", "MN", "MO", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SZ", "TA", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW", "ZZ",
+			}),
+		}
 	}
 
 	items := []*stripe.PaymentLinkLineItemParams{}
 
 	for {
+		fmt.Println("Product ID, qty and Price in cents (e.g. $1.99 = 199), separated by space.")
 		prompt := promptui.Prompt{
-			Label: "Product ID, qty and Price in cents (e.g. $1.99 = 199), separated by space. Leave blank to finish.",
+			Label: "Add Line Item or leave blank to finish",
 		}
 		input, err := prompt.Run()
 		if err != nil {
@@ -197,15 +214,12 @@ func CreateNewLink() {
 			}
 			selectedCustomFields = append(selectedCustomFields, allCustomFields[index].ToStripe())
 		}
+
+		params.CustomFields = selectedCustomFields
 	}
 
 	// Stripe hates empty custom fields
-	var params *stripe.PaymentLinkParams
 	params.LineItems = items
-	params.AllowPromotionCodes = stripe.Bool(allowCouponBool)
-	if len(selectedCustomFields) != 0 {
-		params.CustomFields = selectedCustomFields
-	}
 	paymentConfirmation := DB.GetSettings().PaymentConfirmationMessage
 	if paymentConfirmation != "" {
 		params.AfterCompletion = &stripe.PaymentLinkAfterCompletionParams{
