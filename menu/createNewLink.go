@@ -200,10 +200,10 @@ func CreateNewLink() {
 	}
 
 	// Stripe hates empty custom fields
-	var params *stripe.PaymentLinkParams
+	params := new(stripe.PaymentLinkParams)
 	params.LineItems = items
 	params.AllowPromotionCodes = stripe.Bool(allowCouponBool)
-	if len(selectedCustomFields) != 0 {
+	if selectedCustomFields != nil {
 		params.CustomFields = selectedCustomFields
 	}
 	paymentConfirmation := DB.GetSettings().PaymentConfirmationMessage
