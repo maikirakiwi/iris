@@ -183,4 +183,5 @@ func UpdateInventory(product string, decrementQuantity int64) {
 	if inventory.Quantity == 0 {
 		stripeapi.ToggleProductActivity(product, false)
 	}
+	DB.Conn.Save(&inventory)
 }
