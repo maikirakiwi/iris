@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/manifoldco/promptui"
+	"github.com/stripe/stripe-go/v76"
+	"github.com/stripe/stripe-go/v76/paymentlink"
 
 	DB "iris/v2/database"
 	"iris/v2/models"
@@ -180,8 +182,78 @@ func UpdateInventory(product string, decrementQuantity int64) {
 		return
 	}
 	inventory.Quantity -= decrementQuantity
-	if inventory.Quantity == 0 {
-		stripeapi.ToggleProductActivity(product, false)
+	if inventory.Quantity != 0 {
+		go ClampAdjustableQty(inventory.PaymentLinkIDs, product, inventory.Quantity)
+	} else {
+		go RemoveItemFromLink(inventory.PaymentLinkIDs, product)
 	}
+
 	DB.Conn.Save(&inventory)
+}
+
+func ClampAdjustableQty(links []string, product string, qty int64) {
+	for _, link := range links {
+		linkInfo, err := paymentlink.Get(link, &stripe.PaymentLinkParams{
+			Expand: stripe.StringSlice([]string{"line_items"}),
+		})
+		if err != nil {
+			slog.Error("Error while getting link from Stripe: " + err.Error())
+			return
+		}
+		for _, li := range linkInfo.LineItems.Data {
+			if li.Price.Product.ID == product && li.Price.CustomUnitAmount.Maximum > qty {
+				paymentlink.Update(link, &stripe.PaymentLinkParams{
+					LineItems: []*stripe.PaymentLinkLineItemParams{
+						{
+							ID: &li.ID,
+							AdjustableQuantity: &stripe.PaymentLinkLineItemAdjustableQuantityParams{
+								Enabled: stripe.Bool(true),
+								Maximum: stripe.Int64(qty),
+							},
+						},
+					},
+				})
+				break
+			}
+
+		}
+	}
+}
+
+func RemoveItemFromLink(links []string, product string) {
+	for _, link := range links {
+		linkInfo, err := paymentlink.Get(link, &stripe.PaymentLinkParams{
+			Expand: stripe.StringSlice([]string{"line_items"}),
+		})
+		if err != nil {
+			slog.Error("Error while getting link from Stripe: " + err.Error())
+			return
+		}
+		for _, li := range linkInfo.LineItems.Data {
+			if li.Price.Product.ID == product {
+				if len(linkInfo.LineItems.Data) == 1 {
+					paymentlink.Update(link, &stripe.PaymentLinkParams{
+						Active: stripe.Bool(false),
+						LineItems: []*stripe.PaymentLinkLineItemParams{
+							{
+								ID:       &li.ID,
+								Quantity: stripe.Int64(0),
+							},
+						},
+					})
+					break
+				}
+				paymentlink.Update(link, &stripe.PaymentLinkParams{
+					LineItems: []*stripe.PaymentLinkLineItemParams{
+						{
+							ID:       &li.ID,
+							Quantity: stripe.Int64(0),
+						},
+					},
+				})
+				break
+			}
+
+		}
+	}
 }
