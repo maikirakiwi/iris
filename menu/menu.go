@@ -10,10 +10,14 @@ func Entry() {
 	paymentLinksOpt := []string{"Create New Link", "Modify Existing Link"}
 	customFieldOpt := []string{"Create Custom Field", "Delete Custom Field"}
 	stripeSettingsOpt := []string{"Change Stripe API Key", "Change Webhook Endpoint Secret", "Change Default Currency", "Change Custom Payment Confirmation Message"}
+	invoicePDFOpt := []string{"Create Invoice Template", "Delete Invoice Template"}
+	inventoryOpt := []string{"Add Inventory to Track", "Change Inventory Quantity", "Delete Existing Inventory"}
 	prompt := promptui.Select{
 		Label: "Iris Menu (Ctrl+C to exit at any time)",
 		Items: []string{
 			"Manage Payment Links",
+			"Manage Invoice Templates",
+			"Manage Inventory",
 			"Manage Custom Fields",
 			"Manage Stripe Settings",
 		},
@@ -32,6 +36,11 @@ func Entry() {
 			Label: "Payment Links",
 			Items: paymentLinksOpt,
 		}
+	case "Manage Invoice Templates":
+		prompt = promptui.Select{
+			Label: "Invoice Templates",
+			Items: invoicePDFOpt,
+		}
 	case "Manage Custom Fields":
 		prompt = promptui.Select{
 			Label: "Custom Fields",
@@ -41,6 +50,15 @@ func Entry() {
 		prompt = promptui.Select{
 			Label: "Stripe Settings",
 			Items: stripeSettingsOpt,
+		}
+	case "Manage Inventory":
+		println("Current Inventory:")
+		for _, inv := range ListInventory() {
+			println(inv)
+		}
+		prompt = promptui.Select{
+			Label: "Select Inventory Action",
+			Items: inventoryOpt,
 		}
 	}
 
@@ -77,6 +95,21 @@ func Entry() {
 		Entry()
 	case "Change Custom Payment Confirmation Message":
 		ChangePaymentConfirmationMsg()
+		Entry()
+	case "Create Invoice Template":
+		CreateInvoiceTemplate()
+		Entry()
+	case "Delete Invoice Template":
+		DeleteInvoiceTemplate()
+		Entry()
+	case "Add Inventory to Track":
+		AddTrackingInventory()
+		Entry()
+	case "Change Inventory Quantity":
+		ChangeInventoryQuantity()
+		Entry()
+	case "Delete Existing Inventory":
+		RemoveTrackingInventory()
 		Entry()
 	}
 }

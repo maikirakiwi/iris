@@ -87,10 +87,35 @@ func checkoutHandler(event stripe.Event) bool {
 			}
 			slog.Info("Link " + link.LinkID + " now used " + fmt.Sprintf("%d", link.Used) + " times")
 			db_res = DB.Conn.Save(&link)
-			if db_res.Error != nil {
-				slog.Error("Error while saving link paid event to database: " + db_res.Error.Error())
-				return false
+
+			if len(link.TrackingInventoryIDs) > 0 {
+				// Expand line_items field
+				paidSession, err := paymentlink.Get(session.PaymentLink.ID, &stripe.PaymentLinkParams{
+					Expand: stripe.StringSlice([]string{"line_items"}),
+				})
+				if err != nil {
+					slog.Error("Error while getting session from Stripe: " + err.Error())
+					return false
+				}
+
+				boughtItems := map[string]int64{}
+
+				for _, lineItem := range paidSession.LineItems.Data {
+					boughtItems[lineItem.Price.Product.ID] = lineItem.Quantity
+				}
+
+				for _, trackingItem := range link.TrackingInventoryIDs {
+					menu.UpdateInventory(trackingItem, boughtItems[trackingItem])
+					slog.Info("Tracked item " + trackingItem + " bought " + fmt.Sprintf("%d", boughtItems[trackingItem]) + " times in link " + link.LinkID)
+				}
+
+				if db_res.Error != nil {
+					slog.Error("Error while saving link paid event to database: " + db_res.Error.Error())
+					return false
+				}
+
 			}
+
 		}
 	}
 

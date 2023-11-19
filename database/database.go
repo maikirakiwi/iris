@@ -23,6 +23,7 @@ func Init() {
 		"file:data.db?&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(1)"), &gorm.Config{
 		PrepareStmt: true,
 	})
+	Conn.Statement.RaiseErrorOnNotFound = false
 	if err != nil {
 		panic("failed to connect to database")
 	}
@@ -33,6 +34,8 @@ func Init() {
 		&models.Price{},
 		&models.CustomFields{},
 		&models.DropdownOption{},
+		&models.InvoicePDF{},
+		&models.Inventory{},
 	)
 }
 

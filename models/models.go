@@ -19,12 +19,13 @@ type Settings struct {
 
 type PaymentLink struct {
 	gorm.Model
-	Active   bool
-	Nickname string
-	LinkID   string `gorm:"unique"`
-	URL      string
-	Used     int
-	MaxUses  int
+	Active               bool
+	Nickname             string
+	LinkID               string `gorm:"unique"`
+	URL                  string
+	Used                 int
+	MaxUses              int
+	TrackingInventoryIDs IDs `gorm:"embedded"`
 }
 
 type Price struct {
@@ -55,7 +56,36 @@ type Dropdowns []DropdownOption
 type DropdownOption struct {
 	gorm.Model `json:"-"`
 	Label      string
-	RecValue   string `gorm:"unique"`
+	RecValue   string `gorm:"unique"` // Internal value for reconciliation
+}
+
+type InvoicePDF struct {
+	gorm.Model       `json:"-"`
+	Nickname         string
+	TaxID            string
+	CustomFieldName  string
+	CustomFieldValue string
+	Description      string
+	Footer           string
+}
+
+type Inventory struct {
+	gorm.Model
+	DisplayName    string
+	Product        string
+	Quantity       int64
+	PaymentLinkIDs IDs `gorm:"embedded"`
+}
+
+type IDs []string
+
+func (i *IDs) Scan(src interface{}) error {
+	return json.Unmarshal([]byte(src.(string)), &i)
+}
+
+func (i IDs) Value() (driver.Value, error) {
+	val, err := json.Marshal(i)
+	return string(val), err
 }
 
 func (cf *CustomFields) ToStripe() *stripe.PaymentLinkCustomFieldParams {

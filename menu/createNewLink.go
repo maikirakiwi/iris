@@ -40,19 +40,7 @@ func CreateNewLink() {
 		return
 	}
 
-	prompt = promptui.Prompt{
-		Label: "Allow coupons and promotion codes? (y/n)",
-	}
-	allowCoupon, _ := prompt.Run()
-	if err != nil {
-		println("Error: %v\n", err)
-		return
-	}
-	if allowCoupon == "y" {
-		params.AllowPromotionCodes = stripe.Bool(true)
-	} else {
-		params.AllowPromotionCodes = stripe.Bool(false)
-	}
+	params.AllowPromotionCodes = stripe.Bool(allowCoupons())
 
 	prompt = promptui.Prompt{
 		Label: "Ask for shipping address? (y/n)",
@@ -70,12 +58,91 @@ func CreateNewLink() {
 		}
 	}
 
+	items, trackedItems := addItems(*settings)
+
+	// Optional
+	customFields := allowCustomFields()
+	if customFields != nil {
+		params.CustomFields = customFields
+	}
+	// Optional
+	invoices := allowInvoices()
+	if invoices != nil {
+		params.InvoiceCreation = invoices
+	}
+
+	// Stripe hates empty custom fields
+	params.LineItems = items
+	paymentConfirmation := DB.GetSettings().PaymentConfirmationMessage
+	if paymentConfirmation != "0" {
+		params.AfterCompletion = &stripe.PaymentLinkAfterCompletionParams{
+			Type: stripe.String("hosted_confirmation"),
+			HostedConfirmation: &stripe.PaymentLinkAfterCompletionHostedConfirmationParams{
+				CustomMessage: stripe.String(paymentConfirmation),
+			},
+		}
+	}
+
+	link, err := paymentlink.New(params)
+	if err != nil {
+		println("Error while creating link: " + err.Error())
+		return
+	}
+
+	err = DB.Conn.Create(&models.PaymentLink{
+		Active:               true,
+		Nickname:             nick,
+		LinkID:               link.ID,
+		URL:                  link.URL,
+		Used:                 0,
+		MaxUses:              maxusesInt,
+		TrackingInventoryIDs: trackedItems,
+	}).Error
+	if err != nil {
+		println("Error while adding link to database: " + err.Error())
+		return
+	}
+
+	println("Link: " + link.URL)
+
+}
+
+// Line items and tracked inventory IDs
+func addItems(settings models.Settings) ([]*stripe.PaymentLinkLineItemParams, []string) {
 	items := []*stripe.PaymentLinkLineItemParams{}
+	trackedItems := []string{}
+	rawProducts, err := stripeapi.GetAllProduct(true)
+	if err != nil {
+		println("Error while reading products: " + err.Error())
+		return nil, nil
+	}
+	readableProducts := []string{"Finish Adding"}
+	for _, product := range rawProducts {
+		inv := &models.Inventory{}
+
+		err := DB.Conn.Find(&inv, "product = ?", product.ID).Error
+		if err != nil {
+			println("Error while reading inventory database: " + err.Error())
+			return nil, nil
+		}
+		if inv.Quantity == 0 {
+			readableProducts = append(readableProducts, product.Name+" ("+product.ID+")")
+		} else {
+			readableProducts = append(readableProducts, fmt.Sprintf("%s (%d left) (%s)", product.Name, inv.Quantity, product.ID))
+		}
+	}
 
 	for {
-		fmt.Println("Product ID, qty and Price in cents (e.g. $1.99 = 199), separated by space.")
+		productSelection := promptui.Select{
+			Label: "Select a product to add",
+			Items: readableProducts,
+		}
+		index, res, _ := productSelection.Run()
+		if res == "Finish Adding" {
+			break
+		}
 		prompt := promptui.Prompt{
-			Label: "Add Line Item or leave blank to finish",
+			Label: "Qty and Price in cents, separated by space. (e.g. 3x $1.99 = 3 199)",
 		}
 		input, err := prompt.Run()
 		if err != nil {
@@ -83,28 +150,25 @@ func CreateNewLink() {
 				os.Exit(-1)
 			}
 			println("Error: %v\n", err)
-			return
-		}
-		if input == "" {
-			break
+			continue
 		}
 		split := strings.Split(input, " ")
-		if len(split) != 3 {
+		if len(split) != 2 {
 			println("Error: Invalid input")
 			continue
 		}
-		qty, err := strconv.ParseInt(split[1], 10, 64)
+		qty, err := strconv.ParseInt(split[0], 10, 64)
 		if err != nil {
 			println("Error: Invalid input")
 			continue
 		}
-		perPrice, err := strconv.ParseInt(split[2], 10, 64)
+		perPrice, err := strconv.ParseInt(split[1], 10, 64)
 		if err != nil {
 			println("Error: Invalid input")
 			continue
 		}
 
-		itemID, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, perPrice, split[0])
+		itemID, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, perPrice, rawProducts[index-1].ID)
 		if err != nil {
 			println("Error while adding item: " + err.Error())
 			continue
@@ -119,7 +183,7 @@ func CreateNewLink() {
 				os.Exit(-1)
 			}
 			println("Error: %v\n", err)
-			return
+			continue
 		}
 
 		if input == "y" {
@@ -132,7 +196,7 @@ func CreateNewLink() {
 					os.Exit(-1)
 				}
 				println("Error: %v\n", err)
-				return
+				continue
 			}
 			adjQty := strings.Split(input, " ")
 			if len(adjQty) != 2 {
@@ -165,10 +229,31 @@ func CreateNewLink() {
 				Quantity: stripe.Int64(qty),
 			})
 		}
-
+		if strings.Contains(readableProducts[index], " left) (") {
+			trackedItems = append(trackedItems, rawProducts[index-1].ID)
+		}
 	}
 
-	prompt = promptui.Prompt{
+	return items, trackedItems
+}
+
+func allowCoupons() bool {
+	prompt := promptui.Prompt{
+		Label: "Allow coupons and promotion codes? (y/n)",
+	}
+	allowCoupon, err := prompt.Run()
+	if err != nil {
+		println("Error: %v\n", err)
+		return false
+	}
+	if allowCoupon == "y" {
+		return true
+	}
+	return false
+}
+
+func allowCustomFields() []*stripe.PaymentLinkCustomFieldParams {
+	prompt := promptui.Prompt{
 		Label: "Number of Custom Fields to add (up to 2), leave blank to skip",
 	}
 	input, err := prompt.Run()
@@ -177,19 +262,19 @@ func CreateNewLink() {
 			os.Exit(-1)
 		}
 		println("Error: %v\n", err)
-		return
+		return nil
 	}
 	inputInt, err := strconv.Atoi(input)
 	if err != nil && input != "" {
 		println("Error: %v\n", err)
-		return
+		return nil
 	}
 	selectedCustomFields := []*stripe.PaymentLinkCustomFieldParams{}
 	allCustomFields := []models.CustomFields{}
-	db_res = DB.Conn.Find(&allCustomFields)
+	db_res := DB.Conn.Find(&allCustomFields)
 	if db_res.Error != nil {
 		println("Error: %v\n", db_res.Error.Error())
-		return
+		return nil
 	}
 
 	if len(allCustomFields) == 0 && (input != "" || inputInt > 0) {
@@ -210,45 +295,79 @@ func CreateNewLink() {
 					os.Exit(-1)
 				}
 				println("Prompt failed %v\n", err)
-				return
+				panic(err)
 			}
 			selectedCustomFields = append(selectedCustomFields, allCustomFields[index].ToStripe())
 		}
 
-		params.CustomFields = selectedCustomFields
+		return selectedCustomFields
 	}
 
-	// Stripe hates empty custom fields
-	params.LineItems = items
-	paymentConfirmation := DB.GetSettings().PaymentConfirmationMessage
-	if paymentConfirmation != "" {
-		params.AfterCompletion = &stripe.PaymentLinkAfterCompletionParams{
-			Type: stripe.String("hosted_confirmation"),
-			HostedConfirmation: &stripe.PaymentLinkAfterCompletionHostedConfirmationParams{
-				CustomMessage: stripe.String(paymentConfirmation),
-			},
+	return nil
+}
+
+func allowInvoices() *stripe.PaymentLinkInvoiceCreationParams {
+	prompt := promptui.Prompt{
+		Label: "Generate a post-purchase Invoice? (y/n)",
+	}
+	invoiceEnabled, err := prompt.Run()
+	if err != nil {
+		println("Error: %v\n", err)
+		return nil
+	}
+	allInvoiceTemplates := []models.InvoicePDF{}
+	db_res := DB.Conn.Find(&allInvoiceTemplates)
+	if db_res.Error != nil {
+		println("Error: %v\n", db_res.Error.Error())
+		return nil
+	}
+
+	if invoiceEnabled == "y" && len(allInvoiceTemplates) == 0 {
+		println("No invoice templates found, please create some first.")
+	} else if invoiceEnabled == "y" {
+		readableInvoices := []string{}
+		for _, inv := range allInvoiceTemplates {
+			readableInvoices = append(readableInvoices, inv.Nickname)
 		}
+
+		prompt := promptui.Select{
+			Label: "Select an invoice template to attach",
+			Items: readableInvoices,
+		}
+		index, _, err := prompt.Run()
+		if err != nil {
+			if err == promptui.ErrInterrupt {
+				os.Exit(-1)
+			}
+			println("Prompt failed %v\n", err)
+			return nil
+		}
+
+		res := &stripe.PaymentLinkInvoiceCreationParams{}
+		res.Enabled = stripe.Bool(true)
+		res.InvoiceData = &stripe.PaymentLinkInvoiceCreationInvoiceDataParams{}
+		if allInvoiceTemplates[index].TaxID != "" {
+			res.InvoiceData.AccountTaxIDs = []*string{
+				&allInvoiceTemplates[index].TaxID,
+			}
+		}
+		if allInvoiceTemplates[index].CustomFieldName != "" {
+			res.InvoiceData.CustomFields = []*stripe.PaymentLinkInvoiceCreationInvoiceDataCustomFieldParams{
+				{
+					Name:  stripe.String(allInvoiceTemplates[index].CustomFieldName),
+					Value: stripe.String(allInvoiceTemplates[index].CustomFieldValue),
+				},
+			}
+		}
+		if allInvoiceTemplates[index].Description != "" {
+			res.InvoiceData.Description = stripe.String(allInvoiceTemplates[index].Description)
+		}
+		if allInvoiceTemplates[index].Footer != "" {
+			res.InvoiceData.Footer = stripe.String(allInvoiceTemplates[index].Footer)
+		}
+
+		return res
 	}
 
-	link, err := paymentlink.New(params)
-	if err != nil {
-		println("Error while creating link: " + err.Error())
-		return
-	}
-
-	err = DB.Conn.Create(&models.PaymentLink{
-		Active:   true,
-		Nickname: nick,
-		LinkID:   link.ID,
-		URL:      link.URL,
-		Used:     0,
-		MaxUses:  maxusesInt,
-	}).Error
-	if err != nil {
-		println("Error while adding link to database: " + err.Error())
-		return
-	}
-
-	println("Link: " + link.URL)
-
+	return nil
 }
