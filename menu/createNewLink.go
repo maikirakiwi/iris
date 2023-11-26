@@ -73,7 +73,7 @@ func CreateNewLink() {
 
 	params.LineItems = li
 	params.Mode = stripe.String("payment")
-	params.SuccessURL = stripe.String("http://" + settings.Domain + ":4242/success")
+	params.SuccessURL = stripe.String("http://" + settings.Domain + "/success")
 
 	// Optional
 	customFields := allowCustomFields()
@@ -346,8 +346,9 @@ func allowInvoices() *stripe.CheckoutSessionInvoiceCreationParams {
 			return nil
 		}
 
-		res := &stripe.CheckoutSessionInvoiceCreationParams{}
+		res := new(stripe.CheckoutSessionInvoiceCreationParams)
 		res.Enabled = stripe.Bool(true)
+		res.InvoiceData = &stripe.CheckoutSessionInvoiceCreationInvoiceDataParams{}
 		if allInvoiceTemplates[index].TaxID != "" {
 			res.InvoiceData.AccountTaxIDs = []*string{
 				&allInvoiceTemplates[index].TaxID,

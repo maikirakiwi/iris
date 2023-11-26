@@ -164,7 +164,7 @@ func serveWeb() {
 	r.Get("/pay/{linkID}", checkoutSessionHandler)
 	r.Post("/webhook", webhookHandler)
 	r.Get("/success", successHandler)
-	fmt.Println("Starting server on port 4242")
+	fmt.Printf("Starting server on port 4242, please reverse proxy %s to this port.", DB.GetSettings().Domain)
 	http.ListenAndServe(":4242", r)
 }
 
