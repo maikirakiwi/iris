@@ -63,6 +63,14 @@ func CreateNewLink() {
 	}
 
 	li, trackedItems := addItems(*settings)
+
+	for _, trackedItem := range trackedItems {
+		tracking := &models.Inventory{}
+		DB.Conn.Where(&models.Inventory{Product: trackedItem}).First(&tracking)
+		tracking.SessionLinkIDs = append(tracking.SessionLinkIDs, linkID)
+		DB.Conn.Save(&tracking)
+	}
+
 	params.LineItems = li
 	params.Mode = stripe.String("payment")
 	params.SuccessURL = stripe.String("http://" + settings.Domain + ":4242/success")

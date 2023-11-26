@@ -50,19 +50,6 @@ func GetAllProduct(active bool) ([]*stripe.Product, error) {
 	return products, nil
 }
 
-func GetProductsInLinkReadable(LinkID string) []string {
-	link := models.SessionLink{}
-	err := DB.Conn.Where(&models.SessionLink{LinkID: LinkID}).First(&link)
-	if err.Error != nil {
-		return nil
-	}
-	var products []string
-	for _, li := range link.Params.LineItems {
-		products = append(products, *li.PriceData.ProductData.Name)
-	}
-	return products
-}
-
 func GetProductsInLink(LinkID string) []string {
 	link := models.SessionLink{}
 	err := DB.Conn.Where(&models.SessionLink{LinkID: LinkID}).First(&link)
@@ -71,7 +58,9 @@ func GetProductsInLink(LinkID string) []string {
 	}
 	var products []string
 	for _, li := range link.Params.LineItems {
-		products = append(products, *li.PriceData.Product)
+		price := &models.Price{}
+		DB.Conn.Where(&models.Price{PriceID: *li.Price}).First(price)
+		products = append(products, price.Product)
 	}
 	return products
 }

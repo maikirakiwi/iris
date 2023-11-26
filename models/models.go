@@ -93,7 +93,7 @@ type DropdownOption struct {
 
 type InvoicePDF struct {
 	gorm.Model       `json:"-"`
-	Nickname         string
+	Nickname         string `gorm:"unique"`
 	TaxID            string
 	CustomFieldName  string
 	CustomFieldValue string
@@ -104,7 +104,7 @@ type InvoicePDF struct {
 type Inventory struct {
 	gorm.Model
 	DisplayName    string
-	Product        string
+	Product        string `gorm:"unique"`
 	Quantity       int64
 	SessionLinkIDs IDs `gorm:"embedded"`
 }

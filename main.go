@@ -89,6 +89,10 @@ func checkoutWebhookHandler(event stripe.Event) bool {
 			}
 			slog.Info("Link " + link.LinkID + " now used " + fmt.Sprintf("%d", link.Used) + " times")
 			db_res = DB.Conn.Save(&link)
+			if db_res.Error != nil {
+				slog.Error("Error while saving link paid event to database: " + db_res.Error.Error())
+				return false
+			}
 
 			if len(link.TrackingInventoryIDs) > 0 {
 				// Expand line_items field
@@ -104,11 +108,6 @@ func checkoutWebhookHandler(event stripe.Event) bool {
 				for _, trackingItem := range link.TrackingInventoryIDs {
 					menu.UpdateInventory(trackingItem, boughtItems[trackingItem])
 					slog.Info(fmt.Sprintf("Inventory item %s was bought %d times in link %s", trackingItem, boughtItems[trackingItem], link.LinkID))
-				}
-
-				if db_res.Error != nil {
-					slog.Error("Error while saving link paid event to database: " + db_res.Error.Error())
-					return false
 				}
 
 			}

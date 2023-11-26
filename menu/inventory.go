@@ -180,11 +180,11 @@ func UpdateInventory(product string, decrementQuantity int64) {
 		slog.Error("Error while searching database for product " + product + err.Error())
 		return
 	}
-	inventory.Quantity -= decrementQuantity
+	inventory.Quantity = inventory.Quantity - decrementQuantity
 	if inventory.Quantity > 0 {
-		go ClampAdjustableQty(inventory.SessionLinkIDs, product, inventory.Quantity)
+		ClampAdjustableQty(inventory.SessionLinkIDs, product, inventory.Quantity)
 	} else {
-		go RemoveItemFromLink(inventory.SessionLinkIDs, product)
+		RemoveItemFromLink(inventory.SessionLinkIDs, product)
 	}
 
 	DB.Conn.Save(&inventory)
@@ -199,12 +199,30 @@ func ClampAdjustableQty(links []string, product string, qty int64) {
 			return
 		}
 		for _, li := range seslink.Params.LineItems {
-			if *li.PriceData.Product == product && *li.AdjustableQuantity.Maximum > qty {
-				li.AdjustableQuantity.Maximum = stripe.Int64(qty)
+			price := &models.Price{}
+			err := DB.Conn.Where(&models.Price{PriceID: *li.Price}).First(price).Error
+			if err != nil {
+				slog.Error("Error while getting price from DB: " + err.Error())
+				return
+			}
+			if price.Product == product {
+				if li.AdjustableQuantity != nil {
+					if *li.AdjustableQuantity.Maximum > qty {
+						li.AdjustableQuantity.Maximum = stripe.Int64(qty)
+					}
+					if *li.AdjustableQuantity.Minimum == *li.AdjustableQuantity.Maximum {
+						li.AdjustableQuantity = nil
+					}
+				}
+
+				if *li.Quantity > qty {
+					li.Quantity = stripe.Int64(qty)
+				}
 				break
 			}
 
 		}
+
 		DB.Conn.Save(&seslink)
 	}
 }
@@ -219,13 +237,19 @@ func RemoveItemFromLink(links []string, product string) {
 		}
 		if len(seslink.Params.LineItems) == 1 {
 			seslink.Active = false
+			DB.Conn.Save(&seslink)
 			continue
 		}
 		newLineItems := []*stripe.CheckoutSessionLineItemParams{}
 		for _, li := range seslink.Params.LineItems {
-			if *li.PriceData.Product != product {
+			price := &models.Price{}
+			err := DB.Conn.Where(&models.Price{PriceID: *li.Price}).First(price).Error
+			if err != nil {
+				slog.Error("Error while getting price from DB: " + err.Error())
+				return
+			}
+			if price.Product != product {
 				newLineItems = append(newLineItems, li)
-				break
 			}
 
 		}

@@ -74,11 +74,9 @@ func ModifyExistingLink() {
 	case "Change List Item Price":
 		prompt := promptui.Select{
 			Label: "Change Item Price",
-			Items: stripeapi.GetProductsInLinkReadable(allLinks[selection].LinkID),
+			Items: stripeapi.GetProductsInLink(allLinks[selection].LinkID),
 		}
 		itemSelection, _, _ := prompt.Run()
-		println("Selected: " + *allLinks[selection].Params.LineItems[itemSelection].PriceData.ProductData.Name)
-		println("Current Price: " + strconv.Itoa(int(*allLinks[selection].Params.LineItems[itemSelection].PriceData.UnitAmount)))
 		pricePrompt := promptui.Prompt{
 			Label: "Price in cents. (e.g. $1.99 = 199)",
 		}
@@ -104,12 +102,15 @@ func ModifyExistingLink() {
 			println("Error: %v\n", err)
 			return
 		}
-		newPrice, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, priceInt, *allLinks[selection].Params.LineItems[itemSelection].PriceData.Product)
+		price := &models.Price{}
+		DB.Conn.Where(&models.Price{PriceID: *allLinks[selection].Params.LineItems[itemSelection].Price}).First(price)
+		newPrice, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, priceInt, price.Product)
 		if err != nil {
 			println("Error: %v\n", err)
 			return
 		}
 		*allLinks[selection].Params.LineItems[itemSelection].Price = newPrice
+		DB.Conn.Save(&allLinks[selection])
 	case "Change Max Uses":
 		prompt := promptui.Prompt{
 			Label: "Change Max Uses",
