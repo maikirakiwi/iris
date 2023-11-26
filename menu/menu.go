@@ -7,15 +7,15 @@ import (
 )
 
 func Entry() {
-	paymentLinksOpt := []string{"Create New Link", "Modify Existing Link"}
+	sessionLinksOpt := []string{"Create New Link", "Modify Existing Link"}
 	customFieldOpt := []string{"Create Custom Field", "Delete Custom Field"}
-	stripeSettingsOpt := []string{"Change Stripe API Key", "Change Webhook Endpoint Secret", "Change Default Currency", "Change Custom Payment Confirmation Message"}
+	stripeSettingsOpt := []string{"Change Stripe API Key", "Change Webhook Endpoint Secret", "Change Default Currency", "Change Custom Payment Confirmation Message", "Change Machine Domain"}
 	invoicePDFOpt := []string{"Create Invoice Template", "Delete Invoice Template"}
 	inventoryOpt := []string{"Add Inventory to Track", "Change Inventory Quantity", "Delete Existing Inventory"}
 	prompt := promptui.Select{
 		Label: "Iris Menu (Ctrl+C to exit at any time)",
 		Items: []string{
-			"Manage Payment Links",
+			"Manage Session Links",
 			"Manage Invoice Templates",
 			"Manage Inventory",
 			"Manage Custom Fields",
@@ -31,10 +31,10 @@ func Entry() {
 		return
 	}
 	switch result {
-	case "Manage Payment Links":
+	case "Manage Session Links":
 		prompt = promptui.Select{
-			Label: "Payment Links",
-			Items: paymentLinksOpt,
+			Label: "Session Links",
+			Items: sessionLinksOpt,
 		}
 	case "Manage Invoice Templates":
 		prompt = promptui.Select{
@@ -110,6 +110,9 @@ func Entry() {
 		Entry()
 	case "Delete Existing Inventory":
 		RemoveTrackingInventory()
+		Entry()
+	case "Change Machine Domain":
+		ChangeDomain()
 		Entry()
 	}
 }

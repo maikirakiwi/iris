@@ -8,7 +8,6 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/stripe/stripe-go/v76"
-	"github.com/stripe/stripe-go/v76/paymentlink"
 
 	DB "iris/v2/database"
 	"iris/v2/models"
@@ -23,10 +22,15 @@ func CreateNewLink() {
 		return
 	}
 	stripe.Key = settings.ApiKey
-	params := new(stripe.PaymentLinkParams)
+	params := new(stripe.CheckoutSessionParams)
 
 	prompt := promptui.Prompt{
-		Label: "Set Payment Link Nickname",
+		Label: "Set Session Link ID (to be used /pay/your-link-id)",
+	}
+	linkID, _ := prompt.Run()
+
+	prompt = promptui.Prompt{
+		Label: "Set Session Link Nickname",
 	}
 	nick, _ := prompt.Run()
 
@@ -51,14 +55,17 @@ func CreateNewLink() {
 		return
 	}
 	if shippingAddress == "y" {
-		params.ShippingAddressCollection = &stripe.PaymentLinkShippingAddressCollectionParams{
+		params.ShippingAddressCollection = &stripe.CheckoutSessionShippingAddressCollectionParams{
 			AllowedCountries: stripe.StringSlice([]string{
 				"AC", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AT", "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CV", "CW", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MK", "ML", "MM", "MN", "MO", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SZ", "TA", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW", "ZZ",
 			}),
 		}
 	}
 
-	items, trackedItems := addItems(*settings)
+	li, trackedItems := addItems(*settings)
+	params.LineItems = li
+	params.Mode = stripe.String("payment")
+	params.SuccessURL = stripe.String("http://" + settings.Domain + ":4242/success")
 
 	// Optional
 	customFields := allowCustomFields()
@@ -71,31 +78,12 @@ func CreateNewLink() {
 		params.InvoiceCreation = invoices
 	}
 
-	// Stripe hates empty custom fields
-	params.LineItems = items
-	paymentConfirmation := DB.GetSettings().PaymentConfirmationMessage
-	if paymentConfirmation != "0" {
-		params.AfterCompletion = &stripe.PaymentLinkAfterCompletionParams{
-			Type: stripe.String("hosted_confirmation"),
-			HostedConfirmation: &stripe.PaymentLinkAfterCompletionHostedConfirmationParams{
-				CustomMessage: stripe.String(paymentConfirmation),
-			},
-		}
-	}
-
-	link, err := paymentlink.New(params)
-	if err != nil {
-		println("Error while creating link: " + err.Error())
-		return
-	}
-
-	err = DB.Conn.Create(&models.PaymentLink{
+	err = DB.Conn.Create(&models.SessionLink{
+		LinkID:               linkID,
 		Active:               true,
 		Nickname:             nick,
-		LinkID:               link.ID,
-		URL:                  link.URL,
-		Used:                 0,
 		MaxUses:              maxusesInt,
+		Params:               models.SessionParams{CheckoutSessionParams: *params},
 		TrackingInventoryIDs: trackedItems,
 	}).Error
 	if err != nil {
@@ -103,13 +91,43 @@ func CreateNewLink() {
 		return
 	}
 
-	println("Link: " + link.URL)
+	println("Created Link: /pay/" + linkID)
 
 }
 
+func askQtyandPrice() (int64, int64, error) {
+	prompt := promptui.Prompt{
+		Label: "Qty and Price in cents, separated by space. (e.g. 3x $1.99 = 3 199)",
+	}
+	input, err := prompt.Run()
+	if err != nil {
+		if err == promptui.ErrInterrupt {
+			os.Exit(-1)
+		}
+		println("Error: %v\n", err)
+		return 0, 0, err
+	}
+	split := strings.Split(input, " ")
+	if len(split) != 2 {
+		println("Error: Invalid input")
+		return 0, 0, err
+	}
+	qty, err := strconv.ParseInt(split[0], 10, 64)
+	if err != nil {
+		println("Error: Invalid input")
+		return 0, 0, err
+	}
+	perPrice, err := strconv.ParseInt(split[1], 10, 64)
+	if err != nil {
+		println("Error: Invalid input")
+		return 0, 0, err
+	}
+	return qty, perPrice, nil
+}
+
 // Line items and tracked inventory IDs
-func addItems(settings models.Settings) ([]*stripe.PaymentLinkLineItemParams, []string) {
-	items := []*stripe.PaymentLinkLineItemParams{}
+func addItems(settings models.Settings) ([]*stripe.CheckoutSessionLineItemParams, []string) {
+	items := []*stripe.CheckoutSessionLineItemParams{}
 	trackedItems := []string{}
 	rawProducts, err := stripeapi.GetAllProduct(true)
 	if err != nil {
@@ -141,43 +159,20 @@ func addItems(settings models.Settings) ([]*stripe.PaymentLinkLineItemParams, []
 		if res == "Finish Adding" {
 			break
 		}
-		prompt := promptui.Prompt{
-			Label: "Qty and Price in cents, separated by space. (e.g. 3x $1.99 = 3 199)",
-		}
-		input, err := prompt.Run()
+		qty, perPrice, err := askQtyandPrice()
 		if err != nil {
-			if err == promptui.ErrInterrupt {
-				os.Exit(-1)
-			}
-			println("Error: %v\n", err)
 			continue
 		}
-		split := strings.Split(input, " ")
-		if len(split) != 2 {
-			println("Error: Invalid input")
-			continue
-		}
-		qty, err := strconv.ParseInt(split[0], 10, 64)
-		if err != nil {
-			println("Error: Invalid input")
-			continue
-		}
-		perPrice, err := strconv.ParseInt(split[1], 10, 64)
-		if err != nil {
-			println("Error: Invalid input")
-			continue
-		}
-
 		itemID, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, perPrice, rawProducts[index-1].ID)
 		if err != nil {
 			println("Error while adding item: " + err.Error())
 			continue
 		}
 
-		prompt = promptui.Prompt{
+		prompt := promptui.Prompt{
 			Label: "Allow customer adjustable quantity for this item? (y/n)",
 		}
-		input, err = prompt.Run()
+		input, err := prompt.Run()
 		if err != nil {
 			if err == promptui.ErrInterrupt {
 				os.Exit(-1)
@@ -214,17 +209,17 @@ func addItems(settings models.Settings) ([]*stripe.PaymentLinkLineItemParams, []
 				continue
 			}
 
-			items = append(items, &stripe.PaymentLinkLineItemParams{
+			items = append(items, &stripe.CheckoutSessionLineItemParams{
 				Price:    stripe.String(itemID),
 				Quantity: stripe.Int64(qty),
-				AdjustableQuantity: &stripe.PaymentLinkLineItemAdjustableQuantityParams{
+				AdjustableQuantity: &stripe.CheckoutSessionLineItemAdjustableQuantityParams{
 					Enabled: stripe.Bool(true),
 					Minimum: stripe.Int64(adjMin),
 					Maximum: stripe.Int64(adjMax),
 				},
 			})
 		} else {
-			items = append(items, &stripe.PaymentLinkLineItemParams{
+			items = append(items, &stripe.CheckoutSessionLineItemParams{
 				Price:    stripe.String(itemID),
 				Quantity: stripe.Int64(qty),
 			})
@@ -252,7 +247,7 @@ func allowCoupons() bool {
 	return false
 }
 
-func allowCustomFields() []*stripe.PaymentLinkCustomFieldParams {
+func allowCustomFields() []*stripe.CheckoutSessionCustomFieldParams {
 	prompt := promptui.Prompt{
 		Label: "Number of Custom Fields to add (up to 2), leave blank to skip",
 	}
@@ -269,7 +264,7 @@ func allowCustomFields() []*stripe.PaymentLinkCustomFieldParams {
 		println("Error: %v\n", err)
 		return nil
 	}
-	selectedCustomFields := []*stripe.PaymentLinkCustomFieldParams{}
+	selectedCustomFields := []*stripe.CheckoutSessionCustomFieldParams{}
 	allCustomFields := []models.CustomFields{}
 	db_res := DB.Conn.Find(&allCustomFields)
 	if db_res.Error != nil {
@@ -306,7 +301,7 @@ func allowCustomFields() []*stripe.PaymentLinkCustomFieldParams {
 	return nil
 }
 
-func allowInvoices() *stripe.PaymentLinkInvoiceCreationParams {
+func allowInvoices() *stripe.CheckoutSessionInvoiceCreationParams {
 	prompt := promptui.Prompt{
 		Label: "Generate a post-purchase Invoice? (y/n)",
 	}
@@ -343,16 +338,15 @@ func allowInvoices() *stripe.PaymentLinkInvoiceCreationParams {
 			return nil
 		}
 
-		res := &stripe.PaymentLinkInvoiceCreationParams{}
+		res := &stripe.CheckoutSessionInvoiceCreationParams{}
 		res.Enabled = stripe.Bool(true)
-		res.InvoiceData = &stripe.PaymentLinkInvoiceCreationInvoiceDataParams{}
 		if allInvoiceTemplates[index].TaxID != "" {
 			res.InvoiceData.AccountTaxIDs = []*string{
 				&allInvoiceTemplates[index].TaxID,
 			}
 		}
 		if allInvoiceTemplates[index].CustomFieldName != "" {
-			res.InvoiceData.CustomFields = []*stripe.PaymentLinkInvoiceCreationInvoiceDataCustomFieldParams{
+			res.InvoiceData.CustomFields = []*stripe.CheckoutSessionInvoiceCreationInvoiceDataCustomFieldParams{
 				{
 					Name:  stripe.String(allInvoiceTemplates[index].CustomFieldName),
 					Value: stripe.String(allInvoiceTemplates[index].CustomFieldValue),

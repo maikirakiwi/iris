@@ -8,7 +8,6 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/stripe/stripe-go/v76"
-	"github.com/stripe/stripe-go/v76/paymentlink"
 
 	DB "iris/v2/database"
 	"iris/v2/models"
@@ -70,11 +69,11 @@ func AddTrackingInventory() {
 	invEntry.Quantity = int64(intInventory)
 
 	prompt = promptui.Prompt{
-		Label: "Track inventory on existing Payment Links that have this item? (y/n)",
+		Label: "Track inventory on existing Session Links that have this item? (y/n)",
 	}
 	cascadeTrack, _ := prompt.Run()
 	if cascadeTrack == "y" {
-		allLinks := []models.PaymentLink{}
+		allLinks := []models.SessionLink{}
 		err := DB.Conn.Find(&allLinks).Error
 		if err != nil {
 			println("Error: %v\n", err)
@@ -84,7 +83,7 @@ func AddTrackingInventory() {
 			prodInLink := stripeapi.GetProductsInLink(link.LinkID)
 			if slices.Contains(prodInLink, products[index].ID) {
 				// Too lazy to test associations/many2many
-				invEntry.PaymentLinkIDs = append(invEntry.PaymentLinkIDs, link.LinkID)
+				invEntry.SessionLinkIDs = append(invEntry.SessionLinkIDs, link.LinkID)
 				link.TrackingInventoryIDs = append(link.TrackingInventoryIDs, invEntry.Product)
 				DB.Conn.Save(&link)
 				println("Now tracking " + products[index].Name + " on link " + link.Nickname)
@@ -126,9 +125,9 @@ func RemoveTrackingInventory() {
 		return
 	}
 
-	for _, linkID := range allInventory[index].PaymentLinkIDs {
-		link := models.PaymentLink{}
-		DB.Conn.Where(&models.PaymentLink{LinkID: linkID}).First(&link)
+	for _, linkID := range allInventory[index].SessionLinkIDs {
+		link := models.SessionLink{}
+		DB.Conn.Where(&models.SessionLink{LinkID: linkID}).First(&link)
 		link.TrackingInventoryIDs = removeProdFromLinks(link.TrackingInventoryIDs, allInventory[index].Product)
 		DB.Conn.Save(&link)
 	}
@@ -182,10 +181,10 @@ func UpdateInventory(product string, decrementQuantity int64) {
 		return
 	}
 	inventory.Quantity -= decrementQuantity
-	if inventory.Quantity != 0 {
-		go ClampAdjustableQty(inventory.PaymentLinkIDs, product, inventory.Quantity)
+	if inventory.Quantity > 0 {
+		go ClampAdjustableQty(inventory.SessionLinkIDs, product, inventory.Quantity)
 	} else {
-		go RemoveItemFromLink(inventory.PaymentLinkIDs, product)
+		go RemoveItemFromLink(inventory.SessionLinkIDs, product)
 	}
 
 	DB.Conn.Save(&inventory)
@@ -193,67 +192,44 @@ func UpdateInventory(product string, decrementQuantity int64) {
 
 func ClampAdjustableQty(links []string, product string, qty int64) {
 	for _, link := range links {
-		linkInfo, err := paymentlink.Get(link, &stripe.PaymentLinkParams{
-			Expand: stripe.StringSlice([]string{"line_items"}),
-		})
+		seslink := &models.SessionLink{}
+		err := DB.Conn.Where(&models.SessionLink{LinkID: link}).First(seslink).Error
 		if err != nil {
-			slog.Error("Error while getting link from Stripe: " + err.Error())
+			slog.Error("Error while getting link from DB: " + err.Error())
 			return
 		}
-		for _, li := range linkInfo.LineItems.Data {
-			if li.Price.Product.ID == product && li.Price.CustomUnitAmount.Maximum > qty {
-				paymentlink.Update(link, &stripe.PaymentLinkParams{
-					LineItems: []*stripe.PaymentLinkLineItemParams{
-						{
-							ID: &li.ID,
-							AdjustableQuantity: &stripe.PaymentLinkLineItemAdjustableQuantityParams{
-								Enabled: stripe.Bool(true),
-								Maximum: stripe.Int64(qty),
-							},
-						},
-					},
-				})
+		for _, li := range seslink.Params.LineItems {
+			if *li.PriceData.Product == product && *li.AdjustableQuantity.Maximum > qty {
+				li.AdjustableQuantity.Maximum = stripe.Int64(qty)
 				break
 			}
 
 		}
+		DB.Conn.Save(&seslink)
 	}
 }
 
 func RemoveItemFromLink(links []string, product string) {
 	for _, link := range links {
-		linkInfo, err := paymentlink.Get(link, &stripe.PaymentLinkParams{
-			Expand: stripe.StringSlice([]string{"line_items"}),
-		})
+		seslink := &models.SessionLink{}
+		err := DB.Conn.Where(&models.SessionLink{LinkID: link}).First(seslink).Error
 		if err != nil {
-			slog.Error("Error while getting link from Stripe: " + err.Error())
+			slog.Error("Error while getting link from DB: " + err.Error())
 			return
 		}
-		for _, li := range linkInfo.LineItems.Data {
-			if li.Price.Product.ID == product {
-				if len(linkInfo.LineItems.Data) == 1 {
-					paymentlink.Update(link, &stripe.PaymentLinkParams{
-						Active: stripe.Bool(false),
-						LineItems: []*stripe.PaymentLinkLineItemParams{
-							{
-								ID:       &li.ID,
-								Quantity: stripe.Int64(0),
-							},
-						},
-					})
-					break
-				}
-				paymentlink.Update(link, &stripe.PaymentLinkParams{
-					LineItems: []*stripe.PaymentLinkLineItemParams{
-						{
-							ID:       &li.ID,
-							Quantity: stripe.Int64(0),
-						},
-					},
-				})
+		if len(seslink.Params.LineItems) == 1 {
+			seslink.Active = false
+			continue
+		}
+		newLineItems := []*stripe.CheckoutSessionLineItemParams{}
+		for _, li := range seslink.Params.LineItems {
+			if *li.PriceData.Product != product {
+				newLineItems = append(newLineItems, li)
 				break
 			}
 
 		}
+		seslink.Params.LineItems = newLineItems
+		DB.Conn.Save(&seslink)
 	}
 }

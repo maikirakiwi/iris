@@ -14,18 +14,50 @@ type Settings struct {
 	ApiKey                     string
 	WebhookEndpointSecret      string
 	DefaultCurrency            string `gorm:"default:usd"`
-	PaymentConfirmationMessage string `gorm:"default:0"`
+	PaymentConfirmationMessage string `gorm:"default:Thanks!"`
+	Domain                     string `gorm:"default:localhost"`
 }
 
-type PaymentLink struct {
+type SessionParams struct {
+	stripe.CheckoutSessionParams `gorm:"embedded"`
+}
+
+type Sessions struct {
+	Relation map[string]string `gorm:"embedded"`
+}
+
+func (sp *Sessions) Scan(src interface{}) error {
+	return json.Unmarshal([]byte(src.(string)), &sp)
+}
+
+func (sp Sessions) Value() (driver.Value, error) {
+	val, err := json.Marshal(sp)
+	return string(val), err
+}
+
+type ActiveSession struct {
+	gorm.Model
+	Sessions Sessions `gorm:"embedded"`
+}
+
+type SessionLink struct {
 	gorm.Model
 	Active               bool
-	Nickname             string
 	LinkID               string `gorm:"unique"`
-	URL                  string
+	Nickname             string
 	Used                 int
 	MaxUses              int
-	TrackingInventoryIDs IDs `gorm:"embedded"`
+	Params               SessionParams `gorm:"embedded"`
+	TrackingInventoryIDs IDs           `gorm:"embedded"`
+}
+
+func (sp *SessionParams) Scan(src interface{}) error {
+	return json.Unmarshal([]byte(src.(string)), &sp)
+}
+
+func (sp SessionParams) Value() (driver.Value, error) {
+	val, err := json.Marshal(sp)
+	return string(val), err
 }
 
 type Price struct {
@@ -74,7 +106,7 @@ type Inventory struct {
 	DisplayName    string
 	Product        string
 	Quantity       int64
-	PaymentLinkIDs IDs `gorm:"embedded"`
+	SessionLinkIDs IDs `gorm:"embedded"`
 }
 
 type IDs []string
@@ -88,22 +120,22 @@ func (i IDs) Value() (driver.Value, error) {
 	return string(val), err
 }
 
-func (cf *CustomFields) ToStripe() *stripe.PaymentLinkCustomFieldParams {
-	var dOpts []*stripe.PaymentLinkCustomFieldDropdownOptionParams
+func (cf *CustomFields) ToStripe() *stripe.CheckoutSessionCustomFieldParams {
+	var dOpts []*stripe.CheckoutSessionCustomFieldDropdownOptionParams
 	if cf.Type == "dropdown" {
 		for _, opt := range cf.Dropdown {
-			dOpts = append(dOpts, &stripe.PaymentLinkCustomFieldDropdownOptionParams{
+			dOpts = append(dOpts, &stripe.CheckoutSessionCustomFieldDropdownOptionParams{
 				Label: stripe.String(opt.Label),
 				Value: stripe.String(opt.RecValue),
 			})
 		}
 	}
-	return &stripe.PaymentLinkCustomFieldParams{
+	return &stripe.CheckoutSessionCustomFieldParams{
 		Key: stripe.String(strconv.Itoa(int(cf.ID))),
-		Dropdown: &stripe.PaymentLinkCustomFieldDropdownParams{
+		Dropdown: &stripe.CheckoutSessionCustomFieldDropdownParams{
 			Options: dOpts,
 		},
-		Label: &stripe.PaymentLinkCustomFieldLabelParams{
+		Label: &stripe.CheckoutSessionCustomFieldLabelParams{
 			Type:   stripe.String("custom"), //the only type supported by Stripe
 			Custom: &cf.Label,
 		},

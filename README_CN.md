@@ -5,17 +5,16 @@
 ![Go version](https://img.shields.io/github/go-mod/go-version/maikirakiwi/iris/main?label=go)
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 
-Iris 是一个功能强大且用户友好的无代码 [Stripe](https://stripe.com) Payment Links 管理平台。
+Iris 是一个功能强大且用户友好的无代码 [Stripe](https://stripe.com) 管理平台。
 
 ## 💡 Features
 
 - 易于使用的 TUI 界面进行配置。 
-- 内置库存管理来建立有限使用次数的 Payment Links 
-- Payment Links 自定义
+- 内置库存管理来建立有限使用次数的 Checkout Session Links 
+- Session Links 自定义
     - 计费货币
-    - 付款确认信息
     - 具有文本、数字和下拉输入类型的自定义输入框。
-    - 给 Payment Links 起昵称以方便管理
+    - 给 Session Links 起昵称以方便管理
 - 相当轻量，几乎可以在任何地方运行。
 
 ## 📦 Usage

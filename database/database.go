@@ -30,12 +30,13 @@ func Init() {
 
 	Conn.AutoMigrate(
 		&models.Settings{},
-		&models.PaymentLink{},
 		&models.Price{},
 		&models.CustomFields{},
 		&models.DropdownOption{},
 		&models.InvoicePDF{},
 		&models.Inventory{},
+		&models.SessionLink{},
+		&models.ActiveSession{},
 	)
 }
 

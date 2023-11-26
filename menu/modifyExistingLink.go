@@ -3,13 +3,14 @@ package menu
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/manifoldco/promptui"
 	"github.com/stripe/stripe-go/v76"
-	"github.com/stripe/stripe-go/v76/paymentlink"
 
 	DB "iris/v2/database"
 	"iris/v2/models"
+	stripeapi "iris/v2/stripe-api"
 )
 
 func ModifyExistingLink() {
@@ -21,7 +22,7 @@ func ModifyExistingLink() {
 	}
 	stripe.Key = settings.ApiKey
 
-	allLinks := []models.PaymentLink{}
+	allLinks := []models.SessionLink{}
 	db_res = DB.Conn.Find(&allLinks)
 	if db_res.Error != nil {
 		println("Error: %v\n", db_res.Error)
@@ -52,7 +53,7 @@ func ModifyExistingLink() {
 
 	prompt = promptui.Select{
 		Label: "-> " + readableLinks[selection],
-		Items: []string{"Change Nickname", "Change Max Uses", "Activate/Deactivate Link", "Delete Link"},
+		Items: []string{"Change Nickname", "Change List Item Price", "Change Max Uses", "Activate/Deactivate Link", "Delete Link"},
 	}
 	_, choice, err := prompt.Run()
 	if err != nil {
@@ -65,12 +66,50 @@ func ModifyExistingLink() {
 	switch choice {
 	case "Change Nickname":
 		prompt := promptui.Prompt{
-			Label: "Change Payment Link Nickname",
+			Label: "Change Session Link Nickname",
 		}
 		nick, _ := prompt.Run()
 		allLinks[selection].Nickname = nick
 		DB.Conn.Save(&allLinks[selection])
-
+	case "Change List Item Price":
+		prompt := promptui.Select{
+			Label: "Change Item Price",
+			Items: stripeapi.GetProductsInLinkReadable(allLinks[selection].LinkID),
+		}
+		itemSelection, _, _ := prompt.Run()
+		println("Selected: " + *allLinks[selection].Params.LineItems[itemSelection].PriceData.ProductData.Name)
+		println("Current Price: " + strconv.Itoa(int(*allLinks[selection].Params.LineItems[itemSelection].PriceData.UnitAmount)))
+		pricePrompt := promptui.Prompt{
+			Label: "Price in cents. (e.g. $1.99 = 199)",
+		}
+		input, err := pricePrompt.Run()
+		if err != nil {
+			if err == promptui.ErrInterrupt {
+				os.Exit(-1)
+			}
+			println("Error: %v\n", err)
+			return
+		}
+		split := strings.Split(input, " ")
+		if len(split) != 2 {
+			println("Error: Invalid input")
+			return
+		}
+		priceInt, err := strconv.ParseInt(split[0], 10, 64)
+		if err != nil {
+			println("Error: Invalid input")
+			return
+		}
+		if err != nil {
+			println("Error: %v\n", err)
+			return
+		}
+		newPrice, err := stripeapi.NewPriceIfNotExist(settings.DefaultCurrency, priceInt, *allLinks[selection].Params.LineItems[itemSelection].PriceData.Product)
+		if err != nil {
+			println("Error: %v\n", err)
+			return
+		}
+		*allLinks[selection].Params.LineItems[itemSelection].Price = newPrice
 	case "Change Max Uses":
 		prompt := promptui.Prompt{
 			Label: "Change Max Uses",
@@ -105,30 +144,14 @@ func ModifyExistingLink() {
 			}
 			return
 		}
-		pl, err := paymentlink.Update(
-			allLinks[selection].LinkID,
-			&stripe.PaymentLinkParams{
-				Active: stripe.Bool(!allLinks[selection].Active),
-			},
-		)
-		if err != nil {
-			println("Error while changing link on Stripe: " + err.Error())
-			return
-		}
-		allLinks[selection].Active = pl.Active
+		allLinks[selection].Active = !allLinks[selection].Active
 		DB.Conn.Save(&allLinks[selection])
 	case "Delete Link":
 		prompt := promptui.Prompt{
-			Label: "Delete Link Locally & Deactivate on Stripe? (y/n)",
+			Label: "Delete Link Permanently? (y/n)",
 		}
 		result, _ := prompt.Run()
 		if result == "y" {
-			_, err := paymentlink.Update(
-				allLinks[selection].LinkID,
-				&stripe.PaymentLinkParams{
-					Active: stripe.Bool(false),
-				},
-			)
 			if err != nil {
 				println("Error while changing link on Stripe: " + err.Error())
 				return

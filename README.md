@@ -10,10 +10,10 @@ Iris is a powerful yet user-friendly no-code solution to using [Stripe](https://
 ## 💡 Features
 
 - Easy to use Terminal UI for configuration. 
-- Configure Limited-Use Payment Links with inventory management 
-- Payment Link Customizations
+- Configure Limited-Use Checkout Session Links with inventory management 
+- Checkout Session Customizations
     - Charging Currency
-    - Payment Confirmation Message
+    - Line Item Price Change
     - Custom Fields with input types Text, Numeric, and Dropdowns.
     - Nickname the links for easier management
 - Lightweight and runs quite literally everywhere.

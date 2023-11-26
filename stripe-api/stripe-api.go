@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/stripe/stripe-go/v76"
-	"github.com/stripe/stripe-go/v76/paymentlink"
 	"github.com/stripe/stripe-go/v76/price"
 	"github.com/stripe/stripe-go/v76/product"
 
@@ -51,16 +50,28 @@ func GetAllProduct(active bool) ([]*stripe.Product, error) {
 	return products, nil
 }
 
-func GetProductsInLink(LinkID string) []string {
-	stripe.Key = DB.GetSettings().ApiKey
-	params := &stripe.PaymentLinkListLineItemsParams{
-		PaymentLink: stripe.String(LinkID),
+func GetProductsInLinkReadable(LinkID string) []string {
+	link := models.SessionLink{}
+	err := DB.Conn.Where(&models.SessionLink{LinkID: LinkID}).First(&link)
+	if err.Error != nil {
+		return nil
 	}
-	i := paymentlink.ListLineItems(params)
 	var products []string
-	for i.Next() {
-		li := i.LineItem()
-		products = append(products, li.Price.Product.ID)
+	for _, li := range link.Params.LineItems {
+		products = append(products, *li.PriceData.ProductData.Name)
+	}
+	return products
+}
+
+func GetProductsInLink(LinkID string) []string {
+	link := models.SessionLink{}
+	err := DB.Conn.Where(&models.SessionLink{LinkID: LinkID}).First(&link)
+	if err.Error != nil {
+		return nil
+	}
+	var products []string
+	for _, li := range link.Params.LineItems {
+		products = append(products, *li.PriceData.Product)
 	}
 	return products
 }

@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stripe/stripe-go/v76"
-	"github.com/stripe/stripe-go/v76/paymentlink"
+	csession "github.com/stripe/stripe-go/v76/checkout/session"
 	"github.com/stripe/stripe-go/v76/webhook"
 	"gorm.io/gorm"
 
@@ -41,7 +42,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If error raised while handling event, return bad request.
-	if !checkoutHandler(event) {
+	if !checkoutWebhookHandler(event) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -49,7 +50,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func checkoutHandler(event stripe.Event) bool {
+func checkoutWebhookHandler(event stripe.Event) bool {
 	// Handle the checkout.session.completed event
 	if event.Type == "checkout.session.completed" {
 		var session stripe.CheckoutSession
@@ -61,8 +62,19 @@ func checkoutHandler(event stripe.Event) bool {
 		}
 
 		if session.PaymentStatus == "paid" {
-			link := &models.PaymentLink{}
-			db_res := DB.Conn.Where(&models.PaymentLink{LinkID: session.PaymentLink.ID}).First(&link)
+			activeSessions := &models.ActiveSession{}
+			db_res := DB.Conn.First(&activeSessions)
+			if db_res.Error != nil {
+				if errors.Is(db_res.Error, gorm.ErrRecordNotFound) {
+					return true
+				}
+				slog.Error("Error while reading: " + db_res.Error.Error())
+				return false
+			}
+
+			internalLinkID := activeSessions.Sessions.Relation[session.ID]
+			link := &models.SessionLink{}
+			db_res = DB.Conn.Where(&models.SessionLink{LinkID: internalLinkID}).First(&link)
 			if db_res.Error != nil {
 				if errors.Is(db_res.Error, gorm.ErrRecordNotFound) {
 					return true
@@ -74,39 +86,24 @@ func checkoutHandler(event stripe.Event) bool {
 			link.Used++
 			if link.Used == link.MaxUses {
 				link.Active = false
-				_, err := paymentlink.Update(
-					link.LinkID,
-					&stripe.PaymentLinkParams{
-						Active: stripe.Bool(false),
-					},
-				)
-				if err != nil {
-					slog.Error("Error while changing link on Stripe: " + err.Error())
-					return false
-				}
 			}
 			slog.Info("Link " + link.LinkID + " now used " + fmt.Sprintf("%d", link.Used) + " times")
 			db_res = DB.Conn.Save(&link)
 
 			if len(link.TrackingInventoryIDs) > 0 {
 				// Expand line_items field
-				paidSession, err := paymentlink.Get(session.PaymentLink.ID, &stripe.PaymentLinkParams{
-					Expand: stripe.StringSlice([]string{"line_items"}),
+				i := csession.ListLineItems(&stripe.CheckoutSessionListLineItemsParams{
+					Session: stripe.String(session.ID),
 				})
-				if err != nil {
-					slog.Error("Error while getting session from Stripe: " + err.Error())
-					return false
-				}
-
 				boughtItems := map[string]int64{}
 
-				for _, lineItem := range paidSession.LineItems.Data {
-					boughtItems[lineItem.Price.Product.ID] = lineItem.Quantity
+				for i.Next() {
+					boughtItems[i.LineItem().Price.Product.ID] = i.LineItem().Quantity
 				}
 
 				for _, trackingItem := range link.TrackingInventoryIDs {
 					menu.UpdateInventory(trackingItem, boughtItems[trackingItem])
-					slog.Info("Tracked item " + trackingItem + " bought " + fmt.Sprintf("%d", boughtItems[trackingItem]) + " times in link " + link.LinkID)
+					slog.Info(fmt.Sprintf("Inventory item %s was bought %d times in link %s", trackingItem, boughtItems[trackingItem], link.LinkID))
 				}
 
 				if db_res.Error != nil {
@@ -122,10 +119,54 @@ func checkoutHandler(event stripe.Event) bool {
 	return true
 }
 
+func successHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("<html><body><h1>" + DB.GetSettings().PaymentConfirmationMessage + "</h1></body></html>"))
+}
+
+func checkoutSessionHandler(w http.ResponseWriter, r *http.Request) {
+	linkID := chi.URLParam(r, "linkID")
+	// Get link from database
+	session := &models.SessionLink{}
+	db_res := DB.Conn.Where(&models.SessionLink{LinkID: linkID}).First(&session)
+	if db_res.Error != nil || !session.Active {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("Link invalid"))
+		return
+	}
+
+	stripe.Key = DB.GetSettings().ApiKey
+	res, err := csession.New(&session.Params.CheckoutSessionParams)
+	if err != nil {
+		slog.Error("Error while creating session: " + err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Save session to database
+	activeSession := &models.ActiveSession{}
+	db_res = DB.Conn.FirstOrCreate(&activeSession)
+	if db_res.Error != nil {
+		slog.Error("Error while adding to active session: " + err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if activeSession.Sessions.Relation == nil {
+		activeSession.Sessions.Relation = map[string]string{}
+	}
+	activeSession.Sessions.Relation[res.ID] = session.LinkID
+	DB.Conn.Save(&activeSession)
+
+	// redirect to session url
+	http.Redirect(w, r, res.URL, http.StatusFound)
+}
+
 func serveWeb() {
-	http.HandleFunc("/webhook", webhookHandler)
+	r := chi.NewRouter()
+	r.Get("/pay/{linkID}", checkoutSessionHandler)
+	r.Post("/webhook", webhookHandler)
+	r.Get("/success", successHandler)
 	fmt.Println("Starting server on port 4242")
-	http.ListenAndServe(":4242", nil)
+	http.ListenAndServe(":4242", r)
 }
 
 func main() {
@@ -133,6 +174,7 @@ func main() {
 		DB.Init()
 		menu.ChangeApiKey()
 		menu.ChangeEndpointSecret()
+		menu.ChangeDomain()
 	} else {
 		DB.Init()
 	}
