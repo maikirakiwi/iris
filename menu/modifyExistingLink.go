@@ -3,7 +3,6 @@ package menu
 import (
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/manifoldco/promptui"
 	"github.com/stripe/stripe-go/v76"
@@ -88,12 +87,7 @@ func ModifyExistingLink() {
 			println("Error: %v\n", err)
 			return
 		}
-		split := strings.Split(input, " ")
-		if len(split) != 2 {
-			println("Error: Invalid input")
-			return
-		}
-		priceInt, err := strconv.ParseInt(split[0], 10, 64)
+		priceInt, err := strconv.ParseInt(input, 10, 64)
 		if err != nil {
 			println("Error: Invalid input")
 			return
