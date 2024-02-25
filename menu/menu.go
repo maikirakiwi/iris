@@ -9,7 +9,7 @@ import (
 func Entry() {
 	sessionLinksOpt := []string{"Create New Link", "Modify Existing Link"}
 	customFieldOpt := []string{"Create Custom Field", "Delete Custom Field"}
-	stripeSettingsOpt := []string{"Change Stripe API Key", "Change Webhook Endpoint Secret", "Change Default Currency", "Change Custom Payment Confirmation Message", "Change Machine Domain"}
+	stripeSettingsOpt := []string{"Change Stripe API Key", "Change Webhook Endpoint Secret", "Change Default Currency", "Change Custom Payment Confirmation Message", "Change Machine Domain", "Change Default Shipping Countries"}
 	invoicePDFOpt := []string{"Create Invoice Template", "Delete Invoice Template"}
 	inventoryOpt := []string{"Add Inventory to Track", "Change Inventory Quantity", "Delete Existing Inventory"}
 	prompt := promptui.Select{
@@ -113,6 +113,9 @@ func Entry() {
 		Entry()
 	case "Change Machine Domain":
 		ChangeDomain()
+		Entry()
+	case "Change Default Shipping Countries":
+		ChangeDefaultShippingCountries()
 		Entry()
 	}
 }

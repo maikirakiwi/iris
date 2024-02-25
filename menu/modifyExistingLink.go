@@ -2,7 +2,9 @@ package menu
 
 import (
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/manifoldco/promptui"
 	"github.com/stripe/stripe-go/v76"
@@ -52,7 +54,7 @@ func ModifyExistingLink() {
 
 	prompt = promptui.Select{
 		Label: "-> " + readableLinks[selection],
-		Items: []string{"Change Nickname", "Change List Item Price", "Change Max Uses", "Activate/Deactivate Link", "Delete Link"},
+		Items: []string{"Change Nickname", "Change List Item Price", "Change Max Uses", "Disable Shipping Countries", "Activate/Deactivate Link", "Delete Link"},
 	}
 	_, choice, err := prompt.Run()
 	if err != nil {
@@ -119,6 +121,31 @@ func ModifyExistingLink() {
 			return
 		}
 		allLinks[selection].MaxUses = maxusesInt
+		DB.Conn.Save(&allLinks[selection])
+	case "Disable Shipping Countries":
+		prompt := promptui.Prompt{
+			Label: "Disable Shipping Countries via list of ISO alpha-2 codes, Seperated by Space.",
+		}
+		input, err := prompt.Run()
+		if err != nil {
+			if err == promptui.ErrInterrupt {
+				os.Exit(-1)
+			}
+			println("Error: %v\n", err)
+		}
+		split := strings.Split(input, " ")
+		defaultCountries := []string{
+			"AC", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AT", "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CV", "CW", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MK", "ML", "MM", "MN", "MO", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SZ", "TA", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW", "ZZ",
+		}
+		filteredCountries := stripe.StringSlice([]string{})
+		for _, country := range defaultCountries {
+			if slices.Contains(split, country) {
+				continue
+			}
+			filteredCountries = append(filteredCountries, stripe.String(country))
+		}
+
+		allLinks[selection].Params.ShippingAddressCollection.AllowedCountries = filteredCountries
 		DB.Conn.Save(&allLinks[selection])
 	case "Activate/Deactivate Link":
 		var q promptui.Prompt

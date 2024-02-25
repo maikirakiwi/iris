@@ -16,6 +16,7 @@ type Settings struct {
 	DefaultCurrency            string `gorm:"default:usd"`
 	PaymentConfirmationMessage string `gorm:"default:Thanks!"`
 	Domain                     string `gorm:"default:localhost"`
+	ShippingBannedCountries    IDs    `gorm:"embedded"`
 }
 
 type SessionParams struct {

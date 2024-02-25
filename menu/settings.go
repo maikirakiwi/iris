@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/manifoldco/promptui"
@@ -92,4 +93,29 @@ func ChangeDomain() {
 	}
 	settings.Domain = result
 	DB.Conn.Save(&settings)
+}
+
+func ChangeDefaultShippingCountries() {
+	settings := models.Settings{}
+	db_res := DB.Conn.FirstOrCreate(&settings)
+	if db_res.Error != nil {
+		println("Error: %v\n", db_res.Error.Error())
+		return
+	}
+	var readableBannedCountries string
+	for _, country := range DB.GetSettings().ShippingBannedCountries {
+		readableBannedCountries = readableBannedCountries + " " + country
+	}
+	prompt := promptui.Prompt{
+		Label: fmt.Sprintf("Disable Shipping Countries via list of ISO alpha-2 codes, Seperated by Space (Currently: %s)", readableBannedCountries),
+	}
+	input, err := prompt.Run()
+	if err != nil {
+		if err == promptui.ErrInterrupt {
+			os.Exit(-1)
+		}
+		println("Error: %v\n", err)
+	}
+	split := strings.Split(input, " ")
+	settings.ShippingBannedCountries = split
 }
